@@ -1,6 +1,7 @@
 # train.py
 import math
 import os
+import sys
 
 import joblib
 import matplotlib.pyplot as plt
@@ -13,6 +14,11 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm  # Используем стандартный tqdm для .py файлов
+
+# Добавляем путь к модулю трансформации
+sys.path.append('/Users/void/proj/wundernn_hack')
+from data_transformer import DataTransformer, find_best_transformation
+
 DATA_PATH = "/Users/void/proj/wundernn_hack/competition_package/datasets/train.parquet"
 
 print("--- Начало обучения ---")
@@ -49,6 +55,33 @@ val_df = df[df["seq_ix"].isin(val_seq_ix)].copy()
 feature_cols = [
     col for col in df.columns if col not in ["seq_ix", "step_in_seq", "need_prediction"]
 ]
+
+# --- НОВОЕ: Трансформация данных для борьбы с гетероскедастичностью ---
+print("Поиск лучшего метода трансформации данных...")
+
+# Подготавливаем данные для анализа трансформации
+train_features = train_df[feature_cols].values
+
+# Находим лучший метод трансформации
+best_method, best_transformer = find_best_transformation(train_features)
+
+if best_transformer is not None:
+    print(f"Выбран метод трансформации: {best_method}")
+    
+    # Применяем трансформацию к обучающим данным
+    train_transformed = best_transformer.transform(train_features)
+    train_df[feature_cols] = train_transformed
+    
+    # Применяем трансформацию к валидационным данным
+    val_features = val_df[feature_cols].values
+    val_transformed = best_transformer.transform(val_features)
+    val_df[feature_cols] = val_transformed
+    
+    # Сохраняем трансформатор
+    best_transformer.save("data_transformer.joblib")
+    print("Трансформатор данных сохранен в data_transformer.joblib")
+else:
+    print("Не удалось найти подходящий метод трансформации, используем исходные данные")
 
 # Масштабирование признаков и сохранение скейлера
 scaler = StandardScaler()

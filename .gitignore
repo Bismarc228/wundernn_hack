@@ -5,3 +5,5 @@
 *.parquet
 .venv/
 __pycache__/
+*.zip
+*.png

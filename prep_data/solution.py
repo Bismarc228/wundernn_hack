@@ -4,8 +4,14 @@ import torch
 import torch.nn as nn
 import math
 import joblib
+import os
+import sys
 from collections import deque
 from utils import DataPoint # <-- ИСПРАВЛЕНА ЭТА СТРОКА
+
+#
+from data_transformer import DataTransformer
+TRANSFORMER_AVAILABLE = True
 
 # --- АРХИТЕКТУРА МОДЕЛИ ---
 # Важно: классы модели должны быть определены в этом файле,
@@ -61,9 +67,19 @@ class PredictionModel:
         self.n_features = 32 # Количество признаков
 
         # 1. Загрузка скейлера
-        self.scaler = joblib.load('scaler.joblib')
+        self.scaler = joblib.load('components/scaler.joblib')
+        
+        # 2. Загрузка трансформатора данных (если доступен)
+        self.data_transformer = None
+        if TRANSFORMER_AVAILABLE and os.path.exists('components/data_transformer.joblib'):
+            try:
+                self.data_transformer = DataTransformer.load('components/data_transformer.joblib')
+                print("Трансформатор данных загружен")
+            except Exception as e:
+                print(f"Ошибка загрузки трансформатора: {e}")
+                self.data_transformer = None
 
-        # 2. Инициализация архитектуры модели
+        # 3. Инициализация архитектуры модели
         # Гиперпараметры должны точно совпадать с теми, что были при обучении!
         self.model = TransformerModel(
             input_dim=self.n_features,
@@ -74,12 +90,12 @@ class PredictionModel:
             dropout=0.15
         ).to(self.device)
 
-        # 3. Загрузка весов модели
+        # 4. Загрузка весов модели
         # map_location='cpu' гарантирует, что модель загрузится на CPU, даже если была обучена на GPU
-        self.model.load_state_dict(torch.load('model.pth', map_location=self.device))
+        self.model.load_state_dict(torch.load('components/model.pth', map_location=self.device))
         self.model.eval() # Переводим модель в режим оценки (отключаем dropout и т.д.)
 
-        # 4. Инициализация состояния для отслеживания последовательностей
+        # 5. Инициализация состояния для отслеживания последовательностей
         self.current_seq_ix = None
         # Используем deque для эффективного хранения истории фиксированной длины
         self.history = deque(maxlen=self.sequence_length)
@@ -111,21 +127,51 @@ class PredictionModel:
         # Преобразуем историю в NumPy массив
         input_data = np.array(self.history)
 
-        # 5. Предобработка: масштабируем данные с помощью загруженного скейлера
-        scaled_input = self.scaler.transform(input_data)
+        # 5. Предобработка: применяем трансформацию данных (если доступна)
+        if self.data_transformer is not None:
+            try:
+                transformed_input = self.data_transformer.transform(input_data)
+            except Exception as e:
+                print(f"Ошибка трансформации данных: {e}")
+                transformed_input = input_data
+        else:
+            transformed_input = input_data
 
-        # 6. Преобразуем в тензор PyTorch
+        # 6. Масштабируем данные с помощью загруженного скейлера
+        scaled_input = self.scaler.transform(transformed_input)
+
+        # 7. Преобразуем в тензор PyTorch
         input_tensor = torch.tensor(scaled_input, dtype=torch.float32).unsqueeze(0).to(self.device)
 
-        # 7. Получаем предсказание от модели
+        # 8. Получаем предсказание от модели
         with torch.no_grad(): # Отключаем расчет градиентов для ускорения
             scaled_prediction = self.model(input_tensor)
 
-        # 8. Постобработка: возвращаем предсказание к исходному масштабу
+        # 9. Постобработка: возвращаем предсказание к исходному масштабу
         # Сначала переводим тензор в NumPy массив
         scaled_prediction_np = scaled_prediction.cpu().numpy()
-        # Применяем inverse_transform
+        # Применяем inverse_transform скейлера
         prediction = self.scaler.inverse_transform(scaled_prediction_np)
+        
+        # 10. Обратная трансформация данных (если применялась)
+        if self.data_transformer is not None:
+            try:
+                prediction = self.data_transformer.inverse_transform(prediction)
+            except Exception as e:
+                print(f"Ошибка обратной трансформации данных: {e}")
 
         # Возвращаем одномерный массив, как того требуют правила
         return prediction.squeeze(0)
+
+if __name__ == "__main__":
+    prediction_model = PredictionModel()
+    # Создаем тестовый DataPoint с правильными параметрами
+    test_state = np.random.randn(32)  # 32 признака
+    test_data_point = DataPoint(
+        seq_ix=0,
+        step_in_seq=100,  # Нужно указать step_in_seq
+        need_prediction=True,
+        state=test_state
+    )
+    prediction = prediction_model.predict(test_data_point)
+    print(f"Предсказание выполнено успешно. Форма: {prediction.shape}")
