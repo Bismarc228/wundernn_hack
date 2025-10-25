@@ -4,3 +4,4 @@
 *.joblib
 *.parquet
 .venv/
+__pycache__/

@@ -13,6 +13,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm  # Используем стандартный tqdm для .py файлов
+DATA_PATH = "/Users/void/proj/wundernn_hack/competition_package/datasets/train.parquet"
 
 print("--- Начало обучения ---")
 
@@ -36,7 +37,6 @@ else:
 
 # --- 1. Подготовка данных ---
 # Укажите правильный путь к файлу данных
-DATA_PATH = "/home/jupyter/project/CV/train.parquet"
 df = pd.read_parquet(DATA_PATH)
 
 train_seq_ix, val_seq_ix = train_test_split(
