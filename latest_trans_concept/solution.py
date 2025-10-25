@@ -9,7 +9,8 @@ try:
 except ImportError:
     from utils import DataPoint
     from model import TransformerModel
-
+from pathlib import Path
+local_path = Path(__file__).parent
 # --- КЛАСС ДЛЯ ПРЕДСКАЗАНИЙ ---
 
 class PredictionModel:
@@ -17,7 +18,7 @@ class PredictionModel:
         self.device = torch.device('cpu')
         self.sequence_length = 100 
         self.n_features = 32 
-        self.scaler = joblib.load('scaler.joblib')
+        self.scaler = joblib.load(local_path / 'scaler.joblib')
 
         self.model = TransformerModel(
             input_dim=self.n_features,
@@ -30,7 +31,7 @@ class PredictionModel:
             use_rotary_pos_emb=True
         ).to(self.device)
 
-        self.model.load_state_dict(torch.load('model.pth', map_location=self.device))
+        self.model.load_state_dict(torch.load(local_path / 'model.pth', map_location=self.device))
         self.model.eval()
 
         self.current_seq_ix = None
@@ -63,3 +64,10 @@ class PredictionModel:
         prediction = self.scaler.inverse_transform(scaled_prediction_np)
 
         return prediction.squeeze(0)
+
+if __name__ == "__main__":
+    import os 
+    print(os.getcwd())
+    print(local_path)
+    model = PredictionModel()
+    print(model.predict(DataPoint(seq_ix=1, step_in_seq=0, state=np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), need_prediction=True)))

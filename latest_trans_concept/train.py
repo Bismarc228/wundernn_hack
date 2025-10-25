@@ -209,7 +209,13 @@ for epoch in range(num_epochs):
     print(
         f"Эпоха {epoch+1}/{num_epochs} | Обучение Loss: {avg_train_loss:.4f} | Валидация Loss: {avg_val_loss:.4f} | Валидация R²: {avg_val_r2:.4f} | LR: {current_lr:.6f}"
     )
-
+    name_model = f"model_{epoch+1}_{avg_val_r2:.4f}.pth"
+    if isinstance(model, nn.DataParallel):
+        torch.save(model.module.state_dict(),name_model)
+        print(f"Веса модели (из nn.DataParallel) сохранены в {name_model}")
+    else:
+        torch.save(model.state_dict(),name_model)
+        print(f"Веса модели сохранены в {name_model}")
     scheduler.step(avg_val_loss)
 
 print("\nОбучение завершено.")
